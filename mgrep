@@ -24,6 +24,7 @@ $getopt->getoptions(
     'all|a',
     'count|c',
     'reverse-count|r',
+    'count-no-matches',
     'help|h|?',
     'man',
 ) or die "Couldn't GetOptions";
@@ -165,6 +166,11 @@ while (my $line = <>) {
     # printf "%s: %s", $name, $line;
 }
 
+if ($options{'count-no-matches'}) {
+    foreach my $p (@patterns) {
+        $p->{count} //= 0;
+    }
+}
 if ($options{count}) {
     my @sortedPatterns = sort {
         if ($options{'reverse-count'}) {
@@ -172,7 +178,7 @@ if ($options{count}) {
         } else {
             $b->{count} <=> $a->{count}
         }
-    } grep { $_->{count} } @patterns;
+    } grep { exists $_->{count} } @patterns;
     foreach my $pattern (@sortedPatterns) {
         # $pattern->{example} is only true of $options{'examples'}
         if ($pattern->{example}) {
@@ -244,6 +250,10 @@ matches pr. recipe. Prints most frequent matches first.
 =item B<--reverse-count|-r>
 
 Reverses the count, so most frequent matches are printed last. Implies --count.
+
+=item B<--count-no-matches>
+
+Count also that patterns that don't match at all as 0.
 
 =item B<--examples>
 
