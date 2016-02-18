@@ -16,7 +16,9 @@ $getopt->getoptions(
     'file-with-patterns|f=s@',
     'list-files-with-patterns|l',
     'invert-match|v',
-    'name|n',
+    'show-names',
+    'examples',
+    'only-name=s',
     'all|a',
     'count|c',
     'reverse-count|r',
@@ -27,8 +29,10 @@ $getopt->getoptions(
 pod2usage(1) if $options{help};
 pod2usage(-exitstatus => 0, -verbose => 2) if $options{man};
 
+my $patternRecipeRegex = qr/^([^\/]+)?\/(.*)?\/([imsx]+)?$/;
+
 $options{count} = 1
-    if $options{'reverse-count'};
+    if $options{'reverse-count'} || $options{'examples'};
 
 my $HOME_DIR = $ENV{HOME} ? "$ENV{HOME}/.mgrep" : "/dev/null";
 my $ETC_DIR = "/etc/mgrep";
@@ -50,7 +54,7 @@ if ($options{'list-files-with-patterns'}) {
 sub addPattern {
     my ($patternSpec) = @_;
     my ($name, $regexStr, $flags) = (
-        $patternSpec =~ /^([^\/]+)?\/(.*)?\/([imsx]+)?$/
+        $patternSpec =~ /$patternRecipeRegex/
     )
         or die "Pattern '$patternSpec' is not valid";
     unless ($name) {
@@ -99,22 +103,38 @@ foreach my $file (@{$options{'file-with-patterns'}}) {
     }
 }
 
-# use lib '/opt/capmon/inc';
-# use Dbug; dbugDump(\@patterns);
+my $otherPattern = {
+    name => '<other>',
+};
+
+push @patterns, $otherPattern;
+
 
 sub printMatch {
     my ($pattern, $line) = @_;
-    if ($options{name}) {
-        print +($pattern ? $pattern->{name} : '<other>'), ': ', $line;
-    } else {
-        print $line;
+    if ($options{'only-name'} && $pattern &&
+        $options{'only-name'} ne $pattern->{name}) {
+        return;
     }
+    if ($options{'show-names'}) {
+        my $prefix = $pattern ? $pattern->{name} : '<other>';
+        printf "%s: %s", $prefix, $line;
+        return;
+    }
+    print $line;
 }
 
-my %patternCounts;
+my %patternByName = map {
+    $_->{name} => $_;
+} @patterns;
+
+my $otherPatternCount;
 while (my $line = <>) {
     my $match;
     foreach my $pattern (@patterns) {
+        # Skip the $otherPattern
+        next
+            unless $pattern->{regexpAssemble};
         my $re = $pattern->{regexpAssemble}->re;
         if ($line =~ /$re/) {
             $match = $pattern;
@@ -122,14 +142,16 @@ while (my $line = <>) {
         }
     }
     if ($options{count}) {
-        $patternCounts{$match ? $match->{name} : ''}++;
+        my $pattern = $match // $otherPattern;
+        if ($options{'examples'}) {
+            $pattern->{example} //= $line;
+        }
+        $pattern->{count}++;
         next;
     }
-    my $name;
     if ($match) {
         printMatch($match, $line)
             if $options{all} || ! $options{'invert-match'};
-        $name = $match->{name};
     } else {
         printMatch(undef, $line)
             if $options{all} || $options{'invert-match'};
@@ -138,16 +160,23 @@ while (my $line = <>) {
 }
 
 if ($options{count}) {
-    my @keys = sort {
+    my @sortedPatterns = sort {
         if ($options{'reverse-count'}) {
-            $patternCounts{$a} <=> $patternCounts{$b}
+            $a->{count} <=> $b->{count}
         } else {
-            $patternCounts{$b} <=> $patternCounts{$a}
+            $b->{count} <=> $a->{count}
         }
-    } keys %patternCounts;
-    foreach my $k (@keys) {
-        my $name = $k eq '' ? '<other>' : $k;
-        printf "%6d: %s\n", $patternCounts{$k}, $name;
+    } grep { $_->{count} } @patterns;
+    foreach my $pattern (@sortedPatterns) {
+        # $pattern->{example} is only true of $options{'examples'}
+        if ($pattern->{example}) {
+            print '#' x 80, "\n";
+            printf "%6d: %s\n", $pattern->{count}, $pattern->{name};
+            printf "Regex  : /%s/\n", $pattern->{regexStr};
+            printf "Example: %s\n", $pattern->{example};
+        } else {
+            printf "%6d: %s\n", $pattern->{count}, $pattern->{name};
+        }
     }
 }
 
@@ -213,6 +242,18 @@ Prints the manual page and exits.
 =back
 
 =head1 DESCRIPTION
+
+=head2 RECIPE
+
+A pattern follows the B<recipe>:
+
+    <name>?/<pattern>/<flags>?
+
+C<< <name> >> cannot contain the '/' char, but anything else goes.
+C<< <flags> >> may contain any of the C<< /[msix]/ >> chars from L<perlre>.
+In summary, this is from the source code:
+
+    my $patternRecipeRegex = qr/^([^\/]+)?\/(.*)?\/([imsx]+)?$/;
 
 =head2 EXAMPLE RECIPE LINES
 
