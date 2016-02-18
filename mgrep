@@ -1,0 +1,219 @@
+#!/usr/bin/perl -w
+
+use strict;
+use autodie;
+
+use Getopt::Long;
+use Pod::Usage;
+use Regexp::Assemble;
+my %options = ( pattern => [], configFile => [] );
+my $getopt = new Getopt::Long::Parser;
+$getopt->configure('gnu_getopt');
+$getopt->configure('require_order');
+$getopt->getoptions(
+    \%options,
+    'pattern|p=s@',
+    'file-with-patterns|f=s@',
+    'list-files-with-patterns|l',
+    'invert-match|v',
+    'name|n',
+    'all|a',
+    'count|c',
+    'reverse-count|r',
+    'help|h|?',
+    'man',
+) or die "Couldn't GetOptions";
+
+pod2usage(1) if $options{help};
+pod2usage(-exitstatus => 0, -verbose => 2) if $options{man};
+
+$options{count} = 1
+    if $options{'reverse-count'};
+
+my $HOME_DIR = $ENV{HOME} ? "$ENV{HOME}/.mgrep" : "/dev/null";
+my $ETC_DIR = "/etc/mgrep";
+
+my @patterns;
+
+if ($options{'list-files-with-patterns'}) {
+    my $foundAFile;
+    foreach my $file ( (sort glob "$HOME_DIR/*"), (sort glob "$ETC_DIR/*") ) {
+        $foundAFile = 1;
+        print $file, "\n";
+    }
+    if (! $foundAFile) {
+        print "No files found\n";
+    }
+    exit;
+}
+
+sub addPattern {
+    my ($patternSpec) = @_;
+    my ($name, $regexStr, $flags) = (
+        $patternSpec =~ /^([^\/]+)?\/(.*)?\/([imsx]+)?$/
+    )
+        or die "Pattern '$patternSpec' is not valid";
+    unless ($name) {
+        $name = substr($regexStr, 0, 8);
+    }
+    my $ra = Regexp::Assemble->new();
+    if ($flags) {
+        $ra->flags($flags);
+    }
+    $ra->add($regexStr);
+
+    push @patterns, {
+        name => $name,
+        regexStr => $regexStr,
+        flags => $flags,
+        regexpAssemble => $ra
+    }
+}
+
+sub addPatternFile {
+    my ($file) = @_;
+    open(my $i, '<', $file);
+    while(<$i>) {
+        next if /^#/;
+        chomp;
+        addPattern($_);
+    }
+    close $i;
+}
+
+foreach my $pattern (@{$options{pattern}}) {
+    addPattern($pattern);
+}
+
+foreach my $file (@{$options{'file-with-patterns'}}) {
+    my $homeFile = "$ENV{HOME}/.mgrep/$file";
+    my $etcFile = "/etc/mgrep/$file";
+    if (-r $file) {
+        addPatternFile($file);
+    } elsif (-r $HOME_DIR . "/" . $file) {
+        addPatternFile($HOME_DIR . "/" . $file);
+    } elsif (-r $ETC_DIR . "/" . $file) {
+        addPatternFile($ETC_DIR . "/" . $file);
+    } else {
+        die "Couldn't find $file to read";
+    }
+}
+
+# use lib '/opt/capmon/inc';
+# use Dbug; dbugDump(\@patterns);
+
+sub printMatch {
+    my ($pattern, $line) = @_;
+    if ($options{name}) {
+        print +($pattern ? $pattern->{name} : '<other>'), ': ', $line;
+    } else {
+        print $line;
+    }
+}
+
+my %patternCounts;
+while (my $line = <>) {
+    my $match;
+    foreach my $pattern (@patterns) {
+        my $re = $pattern->{regexpAssemble}->re;
+        if ($line =~ /$re/) {
+            $match = $pattern;
+            last;
+        }
+    }
+    if ($options{count}) {
+        $patternCounts{$match ? $match->{name} : ''}++;
+        next;
+    }
+    my $name;
+    if ($match) {
+        printMatch($match, $line)
+            if $options{all} || ! $options{'invert-match'};
+        $name = $match->{name};
+    } else {
+        printMatch(undef, $line)
+            if $options{all} || $options{'invert-match'};
+    }
+    # printf "%s: %s", $name, $line;
+}
+
+if ($options{count}) {
+    my @keys = sort {
+        if ($options{'reverse-count'}) {
+            $patternCounts{$a} <=> $patternCounts{$b}
+        } else {
+            $patternCounts{$b} <=> $patternCounts{$a}
+        }
+    } keys %patternCounts;
+    foreach my $k (@keys) {
+        my $name = $k eq '' ? '<other>' : $k;
+        printf "%6d: %s\n", $patternCounts{$k}, $name;
+    }
+}
+
+=head1 SYNOPSIS
+
+mgrep [options] [file ...]
+
+mgrep: grep for known patterns in files
+
+A pattern follows the B<recipe>:
+
+    <name>?/<pattern>/<flags>?
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--pattern|-p <pattern>>
+
+Add the pattern to the list of known patterns. Can be specified multiple times.
+Each pattern follows the recipe.
+
+=item B<--file-with-patterns|-f <file>>
+
+Load a set of patterns from a file. Each line that isn't empty and that doesn't
+begin with a '#' is assumed to match the recipe, and is added to the list of
+known patterns.
+
+Each file can be absolute or relative. If no such file can be found a file with
+that name is searched for in C<$HOME/.mgrep/$file> and in C</etc/mgrep/$file>.
+
+Can be specified multiple times.
+
+=item B<-v|--invert-match>
+
+Invert match. Like grep's -v.
+
+=item B<--name|-n>
+
+Prefix each matched line with the name of the recipe it matches
+
+=item B<--all|-a>
+
+Print every line whether it matches or not (useful with -n).
+
+=item B<--count|-c>
+
+Instead of printing every line that matches (or not with -v), print a count of
+matches pr. recipe. Prints most frequent matches first.
+
+=item B<--reverse-count|-r>
+
+Reverses the count, so most frequent matches are printed last. Implies --count.
+
+=item B<--help|-h|-?>
+
+Print a brief help message and exits.
+
+=item B<--man>
+
+Prints the manual page and exits.
+
+=back
+
+=head1 DESCRIPTION
+
+=head2 EXAMPLE RECIPE LINES
+
+=cut
