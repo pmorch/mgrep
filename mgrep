@@ -1,12 +1,14 @@
 #!/usr/bin/perl -w
 
+# Perldoc in the bottom of the file
+
 use strict;
 use autodie;
 
 use Getopt::Long;
 use Pod::Usage;
 use Regexp::Assemble;
-my %options = ( pattern => [], configFile => [] );
+my %options = ( pattern => [], configFile => [], 'show-name' => [] );
 my $getopt = new Getopt::Long::Parser;
 $getopt->configure('gnu_getopt');
 $getopt->configure('require_order');
@@ -16,9 +18,9 @@ $getopt->getoptions(
     'file-with-patterns|f=s@',
     'list-files-with-patterns|l',
     'invert-match|v',
-    'show-names',
+    'prepend-names',
     'examples',
-    'only-name=s',
+    'show-name|s=s@',
     'all|a',
     'count|c',
     'reverse-count|r',
@@ -109,14 +111,18 @@ my $otherPattern = {
 
 push @patterns, $otherPattern;
 
+my %showNames = map { $_ => 1 } @{ $options{'show-name'} };
 
 sub printMatch {
     my ($pattern, $line) = @_;
-    if ($options{'only-name'} && $pattern &&
-        $options{'only-name'} ne $pattern->{name}) {
+    if (
+        $pattern &&
+        $pattern->{name} &&
+        %showNames &&
+        ! $showNames{$pattern->{name}} ) {
         return;
     }
-    if ($options{'show-names'}) {
+    if ($options{'prepend-names'}) {
         my $prefix = $pattern ? $pattern->{name} : '<other>';
         printf "%s: %s", $prefix, $line;
         return;
@@ -210,13 +216,21 @@ that name is searched for in C<$HOME/.mgrep/$file> and in C</etc/mgrep/$file>.
 
 Can be specified multiple times.
 
+=item B<--list-files-with-patterns>
+
+Show files fould in default locations and exit
+
 =item B<-v|--invert-match>
 
 Invert match. Like grep's -v.
 
-=item B<--name|-n>
+=item B<--prepend-names>
 
 Prefix each matched line with the name of the recipe it matches
+
+=item B<--show-name|-s <name>>
+
+Only show lines for pattern named <name>
 
 =item B<--all|-a>
 
@@ -230,6 +244,11 @@ matches pr. recipe. Prints most frequent matches first.
 =item B<--reverse-count|-r>
 
 Reverses the count, so most frequent matches are printed last. Implies --count.
+
+=item B<--examples>
+
+Show the first matched line as an example line along with each summary count.
+Implies --count.
 
 =item B<--help|-h|-?>
 
