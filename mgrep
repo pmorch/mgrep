@@ -82,6 +82,7 @@ sub addPatternFile {
     open(my $i, '<', $file);
     while(<$i>) {
         next if /^#/;
+        next if /^$/;
         chomp;
         addPattern($_);
     }
