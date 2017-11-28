@@ -61,7 +61,7 @@ sub addPattern {
     )
         or die "Pattern '$patternSpec' is not valid";
     unless ($name) {
-        $name = substr($regexStr, 0, 8);
+        $name = substr($regexStr, 0, 20);
     }
     my $ra = Regexp::Assemble->new();
     if ($flags) {
