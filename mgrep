@@ -109,6 +109,7 @@ foreach my $file (@{$options{'file-with-patterns'}}) {
 
 my $otherPattern = {
     name => '<other>',
+    otherPattern => 1,
 };
 
 push @patterns, $otherPattern;
@@ -182,7 +183,7 @@ if ($options{count}) {
     } grep { exists $_->{count} } @patterns;
     foreach my $pattern (@sortedPatterns) {
         # $pattern->{example} is only true of $options{'examples'}
-        if ($pattern->{example}) {
+        if ($pattern->{example} && ! $pattern->{otherPattern}) {
             print '#' x 80, "\n";
             printf "%6d: %s\n", $pattern->{count}, $pattern->{name};
             printf "Regex  : /%s/\n", $pattern->{regexStr};
