@@ -320,8 +320,7 @@ A pattern follows:
     <name>?/<pattern>/<flags>?
 
 C<< <name> >> cannot contain the '/' char, but anything else goes.
-C<< <flags> >> may contain any of the C<< /[msix]/ >> chars from L<perldoc
-perlre>.
+C<< <flags> >> may contain any of the C<< /[msix]/ >> chars from L<perlre>.
 
 =head2 Example Patterns
 

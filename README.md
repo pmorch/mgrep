@@ -120,9 +120,7 @@ A pattern follows:
     <name>?/<pattern>/<flags>?
 
 `<name>` cannot contain the '/' char, but anything else goes.
-`<flags>` may contain any of the `/[msix]/` chars from [perldoc
-perlre](https://metacpan.org/pod/perldoc
-perlre).
+`<flags>` may contain any of the `/[msix]/` chars from [perlre](https://metacpan.org/pod/perlre).
 
 ## Example Patterns
 
